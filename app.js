@@ -3,11 +3,13 @@
    Sections:
      A. Initialization
      B. Authentication
-     C. Firestore CRUD
-     D. UI Rendering
-     E. Form Handling
-     F. Notifications
-     G. PWA Install Prompt
+     C. Firestore CRUD (Tasks)
+     D. Firestore CRUD (Categories)
+     E. UI Rendering
+     F. View Navigation
+     G. Form Handling
+     H. Notifications
+     I. PWA Install Prompt
    ============================================================ */
 
 'use strict';
@@ -18,8 +20,11 @@
 
 let db, auth, currentUser;
 let unsubscribeTasks = null;
+let unsubscribeCategories = null;
 let allTasks = [];
+let allCategories = [];
 let currentFilter = 'all';
+let currentCategoryFilter = '';
 let editingTaskId = null;
 let scheduledNotifications = [];
 let deferredInstallPrompt = null;
@@ -35,6 +40,7 @@ const addTaskForm = document.getElementById('add-task-form');
 const taskTitleInput = document.getElementById('task-title');
 const taskDueDateInput = document.getElementById('task-due-date');
 const taskPrioritySelect = document.getElementById('task-priority');
+const taskCategorySelect = document.getElementById('task-category');
 const taskNotesInput = document.getElementById('task-notes');
 const addTaskBtn = document.getElementById('add-task-btn');
 const titleError = document.getElementById('title-error');
@@ -42,12 +48,14 @@ const titleError = document.getElementById('title-error');
 const taskList = document.getElementById('task-list');
 const emptyState = document.getElementById('empty-state');
 const filterTabs = document.querySelectorAll('.tab');
+const filterCategorySelect = document.getElementById('filter-category');
 
 const editModal = document.getElementById('edit-modal');
 const editTaskForm = document.getElementById('edit-task-form');
 const editTitleInput = document.getElementById('edit-title');
 const editDueDateInput = document.getElementById('edit-due-date');
 const editPrioritySelect = document.getElementById('edit-priority');
+const editCategorySelect = document.getElementById('edit-category');
 const editNotesInput = document.getElementById('edit-notes');
 const editTitleError = document.getElementById('edit-title-error');
 const saveEditBtn = document.getElementById('save-edit-btn');
@@ -61,6 +69,16 @@ const installBanner = document.getElementById('install-banner');
 const installBtn = document.getElementById('install-btn');
 const dismissInstallBtn = document.getElementById('dismiss-install-btn');
 
+// View navigation
+const viewTabs = document.querySelectorAll('.view-tab');
+const viewPanels = document.querySelectorAll('.view-panel');
+
+// Category management
+const categoryNameInput = document.getElementById('category-name-input');
+const addCategoryBtn = document.getElementById('add-category-btn');
+const categoryListEl = document.getElementById('category-list');
+const categoryEmpty = document.getElementById('category-empty');
+
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
@@ -68,9 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
   auth = firebase.auth();
 
   // Enable offline persistence
-  db.enablePersistence({ synchronizeTabs: true }).catch(() => {
-    // Persistence unavailable (private browsing, etc.) — silent fail
-  });
+  db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
   // Register Service Worker
   if ('serviceWorker' in navigator) {
@@ -88,6 +104,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   filterTabs.forEach(tab => {
     tab.addEventListener('click', () => setFilter(tab.dataset.filter));
+  });
+
+  filterCategorySelect.addEventListener('change', () => {
+    currentCategoryFilter = filterCategorySelect.value;
+    renderTasks();
   });
 
   cancelEditBtn.addEventListener('click', closeEditModal);
@@ -109,6 +130,20 @@ document.addEventListener('DOMContentLoaded', () => {
     installBanner.classList.add('hidden');
   });
   installBtn.addEventListener('click', triggerInstall);
+
+  // View tab navigation
+  viewTabs.forEach(tab => {
+    tab.addEventListener('click', () => switchView(tab.dataset.view));
+  });
+
+  // Category management
+  addCategoryBtn.addEventListener('click', handleAddCategory);
+  categoryNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddCategory();
+    }
+  });
 
   // PWA install prompt capture
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -134,19 +169,18 @@ function setupAuthListener() {
       userNameEl.textContent = user.displayName || user.email || '';
       authScreen.classList.add('hidden');
       appScreen.classList.remove('hidden');
+      subscribeToCategories(user.uid);
       subscribeToTasks(user.uid);
-      // Delay permission request so it's not the first thing on page load
       setTimeout(() => requestNotificationPermission(false), 2000);
     } else {
       currentUser = null;
       authScreen.classList.remove('hidden');
       appScreen.classList.add('hidden');
-      if (unsubscribeTasks) {
-        unsubscribeTasks();
-        unsubscribeTasks = null;
-      }
+      if (unsubscribeTasks) { unsubscribeTasks(); unsubscribeTasks = null; }
+      if (unsubscribeCategories) { unsubscribeCategories(); unsubscribeCategories = null; }
       clearScheduledNotifications();
       allTasks = [];
+      allCategories = [];
       taskList.innerHTML = '';
     }
   });
@@ -154,7 +188,6 @@ function setupAuthListener() {
 
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  // Try popup first; fall back to redirect if blocked
   auth.signInWithPopup(provider).catch((err) => {
     if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
       auth.signInWithRedirect(provider);
@@ -164,14 +197,8 @@ function signInWithGoogle() {
   });
 }
 
-// Handle redirect result on page load
-window.addEventListener('DOMContentLoaded', () => {
-  if (typeof auth !== 'undefined') return; // handled after initializeApp
-});
-// We check redirect result inside the auth state change flow automatically.
-
 // ============================================================
-// C. FIRESTORE CRUD
+// C. FIRESTORE CRUD (Tasks)
 // ============================================================
 
 function tasksRef(uid) {
@@ -210,16 +237,49 @@ async function deleteTask(taskId) {
 async function toggleComplete(taskId, currentState) {
   return updateTask(taskId, {
     completed: !currentState,
-    notified: false, // allow re-notification if re-opened
+    notified: false,
   });
 }
 
 // ============================================================
-// D. UI RENDERING
+// D. FIRESTORE CRUD (Categories)
+// ============================================================
+
+function categoriesRef(uid) {
+  return db.collection('users').doc(uid).collection('categories');
+}
+
+function subscribeToCategories(uid) {
+  if (unsubscribeCategories) unsubscribeCategories();
+
+  unsubscribeCategories = categoriesRef(uid)
+    .orderBy('name')
+    .onSnapshot((snapshot) => {
+      allCategories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      renderCategories();
+      populateCategorySelects();
+    }, (err) => {
+      console.error('Categories listener error:', err);
+    });
+}
+
+async function addCategory(name) {
+  return categoriesRef(currentUser.uid).add({ name });
+}
+
+async function deleteCategory(catId) {
+  return categoriesRef(currentUser.uid).doc(catId).delete();
+}
+
+async function renameCategory(catId, newName) {
+  return categoriesRef(currentUser.uid).doc(catId).update({ name: newName });
+}
+
+// ============================================================
+// E. UI RENDERING
 // ============================================================
 
 function renderTasks() {
-  // Filter
   let filtered = allTasks;
   if (currentFilter === 'active') {
     filtered = allTasks.filter(t => !t.completed);
@@ -227,7 +287,10 @@ function renderTasks() {
     filtered = allTasks.filter(t => t.completed);
   }
 
-  // Sort: tasks with due dates first (earliest first), then tasks without
+  if (currentCategoryFilter) {
+    filtered = filtered.filter(t => t.categoryId === currentCategoryFilter);
+  }
+
   filtered = [...filtered].sort((a, b) => {
     const aDate = a.dueDate ? a.dueDate.toDate() : null;
     const bDate = b.dueDate ? b.dueDate.toDate() : null;
@@ -237,7 +300,6 @@ function renderTasks() {
     return 0;
   });
 
-  // Render
   taskList.innerHTML = '';
 
   if (filtered.length === 0) {
@@ -260,11 +322,10 @@ function createTaskElement(task) {
   const now = new Date();
   const dueDate = task.dueDate ? task.dueDate.toDate() : null;
   const isOverdue = dueDate && dueDate < now && !task.completed;
-  const isSoon = dueDate && !isOverdue && (dueDate - now < 60 * 60 * 1000); // within 1 hour
+  const isSoon = dueDate && !isOverdue && (dueDate - now < 60 * 60 * 1000);
 
   if (isOverdue) li.classList.add('overdue');
 
-  // Build due date string
   let dueHtml = '';
   if (dueDate) {
     let dueCls = 'task-due';
@@ -274,11 +335,18 @@ function createTaskElement(task) {
     dueHtml = `<span class="${dueCls}">${icon} ${formatDueDate(dueDate)}</span>`;
   }
 
-  // Priority badge
   const priorityLabel = { high: 'High', medium: 'Medium', low: 'Low' }[task.priority] || 'Low';
   const priorityBadge = `<span class="priority-badge ${task.priority || 'low'}">${priorityLabel}</span>`;
 
-  // Notes
+  // Category badge
+  let categoryBadge = '';
+  if (task.categoryId) {
+    const cat = allCategories.find(c => c.id === task.categoryId);
+    if (cat) {
+      categoryBadge = `<span class="category-badge">${escapeHtml(cat.name)}</span>`;
+    }
+  }
+
   const notesHtml = task.notes
     ? `<div class="task-notes">${escapeHtml(task.notes)}</div>`
     : '';
@@ -290,6 +358,7 @@ function createTaskElement(task) {
       <div class="task-meta">
         ${dueHtml}
         ${priorityBadge}
+        ${categoryBadge}
       </div>
       ${notesHtml}
     </div>
@@ -299,7 +368,6 @@ function createTaskElement(task) {
     </div>
   `;
 
-  // Event listeners
   li.querySelector('.task-checkbox').addEventListener('change', () => {
     toggleComplete(task.id, task.completed);
   });
@@ -313,6 +381,73 @@ function createTaskElement(task) {
   });
 
   return li;
+}
+
+function renderCategories() {
+  categoryListEl.innerHTML = '';
+
+  if (allCategories.length === 0) {
+    categoryEmpty.classList.remove('hidden');
+    return;
+  }
+
+  categoryEmpty.classList.add('hidden');
+
+  allCategories.forEach(cat => {
+    const taskCount = allTasks.filter(t => t.categoryId === cat.id).length;
+    const div = document.createElement('div');
+    div.className = 'category-item';
+    div.innerHTML = `
+      <span class="category-color" style="background: var(--color-primary-light);"></span>
+      <span class="category-name">${escapeHtml(cat.name)}</span>
+      <span class="category-count">${taskCount} task${taskCount !== 1 ? 's' : ''}</span>
+      <div class="category-actions">
+        <button class="edit-btn" aria-label="Rename category">Edit</button>
+        <button class="delete-btn" aria-label="Delete category">Delete</button>
+      </div>
+    `;
+
+    div.querySelector('.edit-btn').addEventListener('click', () => {
+      const newName = prompt('Rename category:', cat.name);
+      if (newName && newName.trim() && newName.trim() !== cat.name) {
+        renameCategory(cat.id, newName.trim()).catch(err => alert('Rename failed: ' + err.message));
+      }
+    });
+
+    div.querySelector('.delete-btn').addEventListener('click', () => {
+      if (taskCount > 0) {
+        if (!confirm(`"${cat.name}" has ${taskCount} task(s). Deleting the category will remove it from those tasks. Continue?`)) return;
+        // Remove categoryId from tasks using this category
+        allTasks.filter(t => t.categoryId === cat.id).forEach(t => {
+          updateTask(t.id, { categoryId: '' }).catch(() => {});
+        });
+      }
+      deleteCategory(cat.id).catch(err => alert('Delete failed: ' + err.message));
+    });
+
+    categoryListEl.appendChild(div);
+  });
+}
+
+function populateCategorySelects() {
+  const selects = [taskCategorySelect, editCategorySelect, filterCategorySelect];
+  selects.forEach(sel => {
+    const currentValue = sel.value;
+    // Clear all options except the first (placeholder)
+    while (sel.options.length > 1) {
+      sel.remove(1);
+    }
+    allCategories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.id;
+      opt.textContent = cat.name;
+      sel.appendChild(opt);
+    });
+    // Restore selection if still valid
+    if ([...sel.options].some(o => o.value === currentValue)) {
+      sel.value = currentValue;
+    }
+  });
 }
 
 function setFilter(filterValue) {
@@ -356,7 +491,23 @@ async function confirmAndDelete(taskId, taskTitle) {
 }
 
 // ============================================================
-// E. FORM HANDLING
+// F. VIEW NAVIGATION
+// ============================================================
+
+function switchView(viewName) {
+  viewTabs.forEach(tab => {
+    const isActive = tab.dataset.view === viewName;
+    tab.classList.toggle('active', isActive);
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+
+  viewPanels.forEach(panel => {
+    panel.classList.toggle('active', panel.id === `view-${viewName}`);
+  });
+}
+
+// ============================================================
+// G. FORM HANDLING
 // ============================================================
 
 async function handleAddTask(e) {
@@ -374,7 +525,8 @@ async function handleAddTask(e) {
     title,
     taskDueDateInput.value,
     taskPrioritySelect.value,
-    taskNotesInput.value.trim()
+    taskNotesInput.value.trim(),
+    taskCategorySelect.value
   );
 
   addTaskBtn.disabled = true;
@@ -384,6 +536,9 @@ async function handleAddTask(e) {
     await addTask(taskData);
     addTaskForm.reset();
     taskPrioritySelect.value = 'medium';
+    taskCategorySelect.value = '';
+    // Switch to task list after adding
+    switchView('list');
   } catch (err) {
     alert('Could not add task: ' + err.message);
   } finally {
@@ -392,7 +547,31 @@ async function handleAddTask(e) {
   }
 }
 
-function buildTaskData(title, dueDateValue, priority, notes) {
+async function handleAddCategory() {
+  const name = categoryNameInput.value.trim();
+  if (!name) {
+    categoryNameInput.focus();
+    return;
+  }
+
+  // Check for duplicate
+  if (allCategories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+    alert('A category with this name already exists.');
+    return;
+  }
+
+  addCategoryBtn.disabled = true;
+  try {
+    await addCategory(name);
+    categoryNameInput.value = '';
+  } catch (err) {
+    alert('Could not add category: ' + err.message);
+  } finally {
+    addCategoryBtn.disabled = false;
+  }
+}
+
+function buildTaskData(title, dueDateValue, priority, notes, categoryId) {
   let dueDate = null;
   if (dueDateValue) {
     const d = new Date(dueDateValue);
@@ -405,6 +584,7 @@ function buildTaskData(title, dueDateValue, priority, notes) {
     notes: notes || '',
     dueDate,
     priority: priority || 'medium',
+    categoryId: categoryId || '',
     completed: false,
     notified: false,
   };
@@ -414,11 +594,11 @@ function openEditModal(task) {
   editingTaskId = task.id;
   editTitleInput.value = task.title || '';
   editPrioritySelect.value = task.priority || 'medium';
+  editCategorySelect.value = task.categoryId || '';
   editNotesInput.value = task.notes || '';
   editTitleError.textContent = '';
 
   if (task.dueDate) {
-    // Convert Firestore Timestamp → local datetime-local string
     const d = task.dueDate.toDate();
     const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
       .toISOString()
@@ -452,9 +632,9 @@ async function saveEdit(e) {
     title,
     editDueDateInput.value,
     editPrioritySelect.value,
-    editNotesInput.value.trim()
+    editNotesInput.value.trim(),
+    editCategorySelect.value
   );
-  // Preserve completed status — don't overwrite it
   delete updates.completed;
 
   saveEditBtn.disabled = true;
@@ -472,7 +652,7 @@ async function saveEdit(e) {
 }
 
 // ============================================================
-// F. NOTIFICATIONS
+// H. NOTIFICATIONS
 // ============================================================
 
 function isIOS() {
@@ -483,7 +663,6 @@ function requestNotificationPermission(explicit = false) {
   if (!('Notification' in window)) return;
 
   if (isIOS()) {
-    // iOS doesn't support Web Notifications — show inline info only if explicitly requested
     if (explicit) {
       alert('Notification reminders are not supported on iOS Safari. Open the app on your PC or Android device to receive reminder notifications.');
     }
@@ -502,7 +681,6 @@ function requestNotificationPermission(explicit = false) {
     return;
   }
 
-  // permission === 'default'
   if (explicit) {
     Notification.requestPermission().then((result) => {
       if (result === 'granted') {
@@ -511,7 +689,6 @@ function requestNotificationPermission(explicit = false) {
       }
     });
   } else {
-    // Show soft nudge banner (don't auto-prompt — browsers block it)
     if (!sessionStorage.getItem('notifDismissed')) {
       notifBanner.classList.remove('hidden');
     }
@@ -530,7 +707,7 @@ function scheduleNotifications(tasks) {
   clearScheduledNotifications();
 
   const now = Date.now();
-  const maxAhead = 24 * 60 * 60 * 1000; // 24 hours
+  const maxAhead = 24 * 60 * 60 * 1000;
 
   tasks.forEach(task => {
     if (task.completed || task.notified || !task.dueDate) return;
@@ -544,7 +721,7 @@ function scheduleNotifications(tasks) {
       const notif = new Notification('📋 ' + task.title, {
         body: 'This task is due now!',
         icon: 'icons/icon-192.png',
-        tag: task.id, // prevents duplicate notifications
+        tag: task.id,
         requireInteraction: true,
       });
 
@@ -553,7 +730,6 @@ function scheduleNotifications(tasks) {
         notif.close();
       };
 
-      // Mark as notified so we don't fire again on reload
       if (currentUser) {
         updateTask(task.id, { notified: true }).catch(() => {});
       }
@@ -564,7 +740,7 @@ function scheduleNotifications(tasks) {
 }
 
 // ============================================================
-// G. PWA INSTALL PROMPT
+// I. PWA INSTALL PROMPT
 // ============================================================
 
 async function triggerInstall() {

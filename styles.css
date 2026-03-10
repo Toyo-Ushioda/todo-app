@@ -8,19 +8,21 @@
 }
 
 :root {
-  --color-primary: #4f46e5;
-  --color-primary-dark: #4338ca;
+  --color-primary: #2d6a4f;
+  --color-primary-dark: #1b4332;
+  --color-primary-light: #a8e6cf;
+  --color-accent: #95d5b2;
   --color-danger: #ef4444;
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-high: #ef4444;
   --color-medium: #f59e0b;
   --color-low: #6b7280;
-  --color-bg: #f3f4f6;
+  --color-bg: #e8f5ee;
   --color-card: #ffffff;
-  --color-text: #111827;
-  --color-text-muted: #6b7280;
-  --color-border: #e5e7eb;
+  --color-text: #1a1a2e;
+  --color-text-muted: #4a5568;
+  --color-border: #c6e9d4;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.10);
   --radius: 10px;
@@ -65,7 +67,7 @@ ul { list-style: none; }
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #a8e6cf 0%, #2d6a4f 100%);
 }
 
 .login-card {
@@ -114,7 +116,7 @@ ul { list-style: none; }
 
 .btn-google:hover {
   background: #f9fafb;
-  border-color: #d1d5db;
+  border-color: #95d5b2;
   box-shadow: var(--shadow-sm);
 }
 
@@ -188,6 +190,54 @@ ul { list-style: none; }
 }
 
 /* ============================================================
+   VIEW NAVIGATION TABS
+   ============================================================ */
+.view-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1rem;
+  background: var(--color-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1.5px solid var(--color-border);
+}
+
+.view-tab {
+  flex: 1;
+  padding: 0.7rem 0.5rem;
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  transition: background 0.15s, color 0.15s;
+}
+
+.view-tab:last-child {
+  border-right: none;
+}
+
+.view-tab.active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.view-tab:hover:not(.active) {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.view-panel {
+  display: none;
+}
+
+.view-panel.active {
+  display: block;
+}
+
+/* ============================================================
    CARD
    ============================================================ */
 .card {
@@ -233,6 +283,7 @@ ul { list-style: none; }
 .flex-1 { flex: 1; min-width: 0; }
 
 .priority-group { width: 130px; flex-shrink: 0; }
+.category-group { width: 160px; flex-shrink: 0; }
 
 label {
   font-size: 0.8rem;
@@ -264,7 +315,7 @@ textarea:focus {
 }
 
 select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%234a5568' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   padding-right: 2rem;
@@ -341,6 +392,19 @@ textarea {
 
 .btn-icon:hover { color: var(--color-text); }
 
+.btn-danger-outline {
+  padding: 0.35rem 0.8rem;
+  background: #fff;
+  color: var(--color-danger);
+  border: 1.5px solid #fecaca;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.btn-danger-outline:hover { background: #fee2e2; }
+
 /* ============================================================
    NOTIFICATION BANNER
    ============================================================ */
@@ -348,12 +412,12 @@ textarea {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: #eff6ff;
-  border: 1.5px solid #bfdbfe;
+  background: #e8f5ee;
+  border: 1.5px solid var(--color-accent);
   border-radius: var(--radius);
   padding: 0.65rem 0.9rem;
   font-size: 0.88rem;
-  color: #1e40af;
+  color: var(--color-primary-dark);
   margin-bottom: 1rem;
   flex-wrap: wrap;
 }
@@ -487,6 +551,15 @@ textarea {
 .priority-badge.medium { background: #fef3c7; color: #92400e; }
 .priority-badge.low { background: #f3f4f6; color: #374151; }
 
+.category-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
 .task-notes {
   font-size: 0.82rem;
   color: var(--color-text-muted);
@@ -512,11 +585,11 @@ textarea {
 }
 
 .edit-btn {
-  background: #f3f4f6;
-  color: var(--color-text);
+  background: #e8f5ee;
+  color: var(--color-primary);
 }
 
-.edit-btn:hover { background: #e5e7eb; }
+.edit-btn:hover { background: #c6e9d4; }
 
 .delete-btn {
   background: #fee2e2;
@@ -524,6 +597,77 @@ textarea {
 }
 
 .delete-btn:hover { background: #fecaca; }
+
+/* ============================================================
+   CATEGORIES PANEL
+   ============================================================ */
+.categories-section {
+  margin-bottom: 1rem;
+}
+
+.category-add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.category-add-row input {
+  flex: 1;
+}
+
+.category-add-row button {
+  flex-shrink: 0;
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  background: var(--color-card);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border);
+  transition: box-shadow 0.15s;
+}
+
+.category-item:hover { box-shadow: var(--shadow-sm); }
+
+.category-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.category-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.category-count {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-right: 0.5rem;
+}
+
+.category-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.category-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
 
 /* ============================================================
    EMPTY STATE
@@ -662,5 +806,9 @@ textarea {
 
   .priority-group {
     width: 150px;
+  }
+
+  .category-group {
+    width: 180px;
   }
 }

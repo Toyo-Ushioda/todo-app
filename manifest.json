@@ -1,13 +1,13 @@
 {
-  "name": "My To-Do List",
-  "short_name": "ToDo",
+  "name": "WFE Tasks",
+  "short_name": "WFE Tasks",
   "description": "Personal task manager with reminders and cross-device sync",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#4f46e5",
-  "theme_color": "#4f46e5",
+  "background_color": "#e8f5ee",
+  "theme_color": "#2d6a4f",
   "icons": [
     {
       "src": "icons/icon-192.png",

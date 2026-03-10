@@ -2,7 +2,7 @@
    SERVICE WORKER — Offline caching for PWA
    ============================================================ */
 
-const CACHE_NAME = 'todo-app-v1';
+const CACHE_NAME = 'todo-app-v2';
 
 const FILES_TO_CACHE = [
   './',
